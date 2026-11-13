@@ -92,6 +92,12 @@ a:focus-visible, button:focus-visible { outline: 3px solid var(--focus); outline
 .legend { display: flex; flex-wrap: wrap; gap: .5rem 1.75rem; margin: .5rem 0 0; padding: 0; list-style: none; color: var(--muted); font-size: .95rem; }
 .legend li { display: flex; align-items: center; gap: .5rem; }
 .legend i { width: .8rem; height: .8rem; border-radius: 50%; display: inline-block; }
+.line-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1.5rem; margin-top: .5rem; }
+.line-foot .legend { margin: 0; }
+.motion-btn { display: inline-flex; align-items: center; gap: .45rem; padding: .35rem .85rem; border: 1.5px solid #b9c4ca; border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: .9rem; font-weight: 500; cursor: pointer; }
+.motion-btn:hover { color: var(--ink); border-color: var(--ink); }
+.motion-btn svg { width: .7rem; height: .7rem; fill: currentColor; }
+.motion-btn[data-playing="true"] .i-play, .motion-btn[data-playing="false"] .i-pause { display: none; }
 @media (max-width: 640px) {
   #line .wide-only { display: none; }
   #line .lbl { font-size: 24px; }
@@ -227,11 +233,18 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2.5rem; color: var
       <text x="624" y="350" text-anchor="middle" class="lbl wide-only">Rejected</text>
       <g id="parts"></g>
     </svg>
-    <ul class="legend" aria-hidden="true">
-      <li><i style="background:var(--ok)"></i>Passed</li>
-      <li><i style="background:var(--review)"></i>Sent to the language model</li>
-      <li><i style="background:var(--ng)"></i>Rejected</li>
-    </ul>
+    <div class="line-foot">
+      <ul class="legend" aria-hidden="true">
+        <li><i style="background:var(--ok)"></i>Passed</li>
+        <li><i style="background:var(--review)"></i>Sent to the language model</li>
+        <li><i style="background:var(--ng)"></i>Rejected</li>
+      </ul>
+      <button type="button" id="line-toggle" class="motion-btn" data-playing="true" aria-label="Pause the animation">
+        <svg class="i-pause" viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="1.5" width="2.8" height="9" rx=".6"/><rect x="7.2" y="1.5" width="2.8" height="9" rx=".6"/></svg>
+        <svg class="i-play" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.7v8.6a.7.7 0 0 0 1.05.6l6.9-4.3a.7.7 0 0 0 0-1.2L4.05 1.1A.7.7 0 0 0 3 1.7z"/></svg>
+        <span>Pause</span>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -368,6 +381,17 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2.5rem; color: var
   var SPACING = 0.78; // seconds between parts
   var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
   var narrow = window.matchMedia("(max-width: 640px)");
+  var toggle = document.getElementById("line-toggle");
+  // The line moves unless the system asks for less motion; the button lets a visitor change
+  // that either way, and their choice wins over the system setting.
+  var choice = null;
+  function wantMotion() { return choice === null ? !reduce.matches : choice; }
+  function syncToggle() {
+    var on = wantMotion();
+    toggle.setAttribute("data-playing", on ? "true" : "false");
+    toggle.setAttribute("aria-label", on ? "Pause the animation" : "Play the animation");
+    toggle.querySelector("span").textContent = on ? "Pause" : "Play";
+  }
 
   function fitView() {
     // On a phone, show only the part of the line that tells the story (camera to LLM review)
@@ -482,7 +506,7 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2.5rem; color: var
   }
 
   function start() {
-    if (running || reduce.matches || !visible || document.hidden) return;
+    if (running || !wantMotion() || !visible || document.hidden) return;
     running = true; last = 0;
     requestAnimationFrame(step);
   }
@@ -491,7 +515,8 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2.5rem; color: var
   function setup() {
     stop();
     parts = []; layer.textContent = "";
-    if (reduce.matches) { staticScene(); return; }
+    syncToggle();
+    if (!wantMotion()) { staticScene(); return; }
     // Start with the line already in motion rather than empty, spaced exactly as new parts
     // will arrive so nothing overlaps.
     for (var s = 13; s >= 1; s--) {
@@ -519,6 +544,13 @@ footer { border-top: 1px solid var(--line); padding: 1.5rem 0 2.5rem; color: var
   }
   document.addEventListener("visibilitychange", function () { if (document.hidden) stop(); else start(); });
   if (reduce.addEventListener) reduce.addEventListener("change", setup);
+  toggle.addEventListener("click", function () {
+    choice = !wantMotion();
+    syncToggle();
+    if (!choice) stop();            // pause where it is
+    else if (parts.length) start(); // resume
+    else setup();                   // from the still picture: fill the line and run
+  });
   setup();
 })();
 </script>
